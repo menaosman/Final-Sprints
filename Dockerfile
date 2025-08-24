@@ -1,17 +1,13 @@
-FROM node:18-alpine3.17
+FROM python:3.11-slim
 
-WORKDIR /usr/app
+WORKDIR /app
 
-COPY package*.json /usr/app/
+COPY requirements.txt .
 
-RUN npm install
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV MONGO_URI=mongodb+srv://supercluster.d83jj.mongodb.net/superData
-ENV MONGO_USERNAME=superuser
-ENV MONGO_PASSWORD=SuperPassword
+EXPOSE 5000
 
-EXPOSE 3000
-
-CMD [ "npm", "start" ]
+CMD ["python", "app.py"]

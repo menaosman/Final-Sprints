@@ -1,19 +1,19 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
- name: microservice
+  name: python-microservice
 spec:
   replicas: 3
   selector:
-   matchLabels:
-    app: microservice
+    matchLabels:
+      app: python-microservice
   template:
-   metadata:
-    labels:
-     app: microservice
-   spec:
-    containers:
-    - name: microservice
-      image: 20150748/solar-system:latest
-      ports:
-      - containerPort: 3000
+    metadata:
+      labels:
+        app: python-microservice
+    spec:
+      containers:
+      - name: python-microservice
+        image: mo4222/python-app:latest
+        ports:
+        - containerPort: 5000
