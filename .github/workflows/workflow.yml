@@ -19,6 +19,71 @@ env:
   EKS_CLUSTER_NAME: sprints-cluster-0
 
 jobs:
+  jobs:
+  setup-backend:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.action != 'destroy'
+    
+    steps:
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v4
+      with:
+        aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws-region: us-east-1
+
+    - name: Create S3 bucket for Terraform state
+      run: |
+        # Check if bucket exists, create if not
+        if ! aws s3 ls s3://mokhaled-bucket-1284 2>/dev/null; then
+          echo "Creating S3 bucket..."
+          aws s3 mb s3://mokhaled-bucket-1284 --region us-east-1
+          
+          # Enable versioning
+          aws s3api put-bucket-versioning \
+            --bucket mokhaled-bucket-1284 \
+            --versioning-configuration Status=Enabled
+          
+          # Enable encryption
+          aws s3api put-bucket-encryption \
+            --bucket mokhaled-bucket-1284 \
+            --server-side-encryption-configuration '{
+              "Rules": [{
+                "ApplyServerSideEncryptionByDefault": {
+                  "SSEAlgorithm": "AES256"
+                }
+              }]
+            }'
+          
+          # Block public access
+          aws s3api put-public-access-block \
+            --bucket mokhaled-bucket-1284 \
+            --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
+          
+          echo "S3 bucket created successfully!"
+        else
+          echo "S3 bucket already exists"
+        fi
+
+    - name: Create DynamoDB table for state locking
+      run: |
+        # Check if table exists, create if not
+        if ! aws dynamodb describe-table --table-name terraform-lock --region us-east-1 2>/dev/null; then
+          echo "Creating DynamoDB table..."
+          aws dynamodb create-table \
+            --table-name terraform-lock \
+            --attribute-definitions AttributeName=LockID,AttributeType=S \
+            --key-schema AttributeName=LockID,KeyType=HASH \
+            --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
+            --region us-east-1
+          
+          # Wait for table to be active
+          echo "Waiting for table to be active..."
+          aws dynamodb wait table-exists --table-name terraform-lock --region us-east-1
+          echo "DynamoDB table created successfully!"
+        else
+          echo "DynamoDB table already exists"
+        fi
   containerization:
     runs-on: ubuntu-latest
     outputs:
