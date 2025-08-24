@@ -1,37 +1,68 @@
 import os
-from flask import Flask
-from flaskext.mysql import MySQL
+from flask import Flask, jsonify
+from flask_mysqldb import MySQL
 
 app = Flask(__name__)
 
 mysql = MySQL()
 
-# MySQL configurations (from environment variables)
-app.config['MYSQL_DATABASE_USER'] = os.getenv("MYSQL_DATABASE_USER", "db_user")
-app.config['MYSQL_DATABASE_PASSWORD'] = os.getenv("MYSQL_DATABASE_PASSWORD", "Passw0rd")
-app.config['MYSQL_DATABASE_DB'] = os.getenv("MYSQL_DATABASE_DB", "employee_db")
-app.config['MYSQL_DATABASE_HOST'] = os.getenv("MYSQL_DATABASE_HOST", "localhost")
+# MySQL configurations (from environment variables) - No default fallbacks for security
+app.config['MYSQL_HOST'] = os.getenv("MYSQL_DATABASE_HOST")
+app.config['MYSQL_USER'] = os.getenv("MYSQL_DATABASE_USER")
+app.config['MYSQL_PASSWORD'] = os.getenv("MYSQL_DATABASE_PASSWORD")
+app.config['MYSQL_DB'] = os.getenv("MYSQL_DATABASE_DB")
+
+# Validate required environment variables
+required_env_vars = ['MYSQL_DATABASE_HOST', 'MYSQL_DATABASE_USER', 'MYSQL_DATABASE_PASSWORD', 'MYSQL_DATABASE_DB']
+for var in required_env_vars:
+    if not os.getenv(var):
+        raise ValueError(f"{var} environment variable is required")
 
 mysql.init_app(app)
 
 @app.route("/")
 def main():
-    return "Welcome!"
+    return jsonify({"message": "Welcome!", "status": "healthy"})
 
-@app.route("/how are you")
-def hello():
-    return "I am good, how about you?"
+@app.route("/health")
+def health():
+    return jsonify({"message": "I am good, how about you?", "status": "healthy"})
 
-@app.route("/read from database")
-def read():
-    conn = mysql.connect()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM employees")
-    rows = cursor.fetchall()
-    result = [str(row[0]) for row in rows]
-    cursor.close()
-    conn.close()
-    return ",".join(result)
+@app.route("/employees")
+def read_employees():
+    try:
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT * FROM employees")
+        rows = cursor.fetchall()
+        
+        if not rows:
+            return jsonify({"message": "No employees found", "data": []}), 200
+        
+        # Convert to proper JSON format
+        employees = []
+        for row in rows:
+            employees.append({
+                "id": row[0],
+                "data": str(row[0])  # Keeping original logic
+            })
+        
+        cursor.close()
+        return jsonify({"message": "Success", "data": employees}), 200
+        
+    except Exception as e:
+        app.logger.error(f"Database error: {str(e)}")
+        return jsonify({"error": "Database connection failed", "message": str(e)}), 500
+
+# Health check endpoint for Kubernetes
+@app.route("/healthz")
+def healthz():
+    try:
+        cursor = mysql.connection.cursor()
+        cursor.execute("SELECT 1")
+        cursor.close()
+        return jsonify({"status": "healthy", "database": "connected"}), 200
+    except Exception as e:
+        return jsonify({"status": "unhealthy", "database": "disconnected", "error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    app.run(host="0.0.0.0", port=5000, debug=False)

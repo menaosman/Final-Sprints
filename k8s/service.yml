@@ -1,12 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
- name: microservice-service
+  name: python-microservice-service
+  labels:
+    app: python-microservice
 spec:
   selector:
-   app: microservice
+    app: python-microservice  # Fixed: matches deployment labels
   ports:
   - protocol: TCP
     port: 80
-    targetPort: 3000
+    targetPort: 5000  # Fixed: Flask app runs on 5000
+    name: http
   type: LoadBalancer

@@ -17,21 +17,24 @@ resource "aws_iam_role" "node" {
 resource "aws_iam_role_policy_attachment" "node_policy" {
   for_each = toset([
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryPullOnly",
-    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy"
+    "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
   ])
 
   policy_arn = each.value
   role       = aws_iam_role.node.name
 }
 
-
 resource "aws_eks_node_group" "main" {
-  for_each          = var.node_groups
-  cluster_name      = aws_eks_cluster.main.name
-  node_group_name   = each.key
-  node_role_arn     = aws_iam_role.node.arn
-  subnet_ids        = var.subnet_ids
+  for_each        = var.node_groups
+  cluster_name    = aws_eks_cluster.main.name
+  node_group_name = each.key
+  node_role_arn   = aws_iam_role.node.arn
+  subnet_ids      = var.subnet_ids
+
+  # Fixed: Added missing configuration
+  instance_types = each.value.instance_types
+  capacity_type  = each.value.capacity_type
 
   scaling_config {
     desired_size = each.value.scaling_config.desired_size
@@ -43,7 +46,16 @@ resource "aws_eks_node_group" "main" {
     max_unavailable = 1
   }
 
+  # Added: Better launch template configuration
+  launch_template {
+    version = "$Latest"
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.node_policy
   ]
+
+  tags = {
+    Name = "${var.cluster_name}-${each.key}-node-group"
+  }
 }

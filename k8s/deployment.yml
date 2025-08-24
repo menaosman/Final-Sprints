@@ -2,6 +2,8 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: python-microservice
+  labels:
+    app: python-microservice
 spec:
   replicas: 3
   selector:
@@ -14,6 +16,50 @@ spec:
     spec:
       containers:
       - name: python-microservice
-        image: mo4222/python-app:latest
+        image: ${DOCKER_IMAGE}  # Will be replaced by GitHub Actions
         ports:
         - containerPort: 5000
+          name: http
+        env:
+        - name: MYSQL_DATABASE_HOST
+          value: "${MYSQL_HOST}"  # Will be replaced by GitHub Actions
+        - name: MYSQL_DATABASE_USER
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: username
+        - name: MYSQL_DATABASE_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mysql-secret
+              key: password
+        - name: MYSQL_DATABASE_DB
+          value: "${MYSQL_DATABASE}"  # Will be replaced by GitHub Actions
+        resources:
+          limits:
+            cpu: 500m
+            memory: 512Mi
+          requests:
+            cpu: 100m
+            memory: 128Mi
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          failureThreshold: 3
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
