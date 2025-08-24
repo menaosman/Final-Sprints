@@ -138,6 +138,7 @@ jobs:
   terraform:
     runs-on: ubuntu-latest
     if: github.event.inputs.action != 'destroy'
+    needs: [setup-backend]
     
     steps:
       - name: Checkout code
