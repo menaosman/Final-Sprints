@@ -65,12 +65,6 @@ jobs:
         continue-on-error: true
         run: pytest --cov=app --cov-report=html --cov-report=xml || echo "Coverage completed"
 
-      - name: Archive Coverage Results
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: code-coverage-results
-          path: htmlcov/
-          retention-days: 5
 
   docker:
     name: containerization
