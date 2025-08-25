@@ -109,8 +109,8 @@ jobs:
           context: .
           push: true
           tags: |
-            mo4222/solar-system:${{ github.sha }}
-            ghcr.io/mo-khaled/solar-system:${{ github.sha }}
+            mo4222/flask-app:${{ github.sha }}
+            ghcr.io/mo-khaled/flask-app:${{ github.sha }}
 
       - name: Test Docker Image
         run: |
@@ -121,7 +121,7 @@ jobs:
           -e MYSQL_DATABASE_USER=${{ secrets.MYSQL_USERNAME }} \
           -e MYSQL_DATABASE_PASSWORD=${{ secrets.MYSQL_PASSWORD }} \
           -e MYSQL_DATABASE_DB=${{ vars.MYSQL_DATABASE }} \
-          ${{ secrets.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+          ${{ secrets.DOCKERHUB_USERNAME }}/flask-app:${{ github.sha }}
           sleep 10
           echo "Testing application health endpoint"
           curl -f http://127.0.0.1:5000/live || exit 1
