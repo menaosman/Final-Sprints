@@ -1,8 +1,12 @@
 import os
 from flask import Flask, jsonify
 from flask_mysqldb import MySQL
+from prometheus_flask_exporter import PrometheusMetrics
 
 app = Flask(__name__)
+
+# Initialize Prometheus metrics
+metrics = PrometheusMetrics(app)
 
 mysql = MySQL()
 
@@ -63,6 +67,11 @@ def healthz():
         return jsonify({"status": "healthy", "database": "connected"}), 200
     except Exception as e:
         return jsonify({"status": "unhealthy", "database": "disconnected", "error": str(e)}), 500
+
+@app.route("/metrics")
+def metrics_endpoint():
+    """Prometheus metrics endpoint"""
+    return metrics.generate_latest()
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False)
