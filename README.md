@@ -380,24 +380,6 @@ kubectl top pods
 8. Push to the branch (`git push origin feature/amazing-feature`)
 9. Open a Pull Request
 
-### Development Guidelines
-
-- Follow PEP 8 for Python code style
-- Add unit tests for new features
-- Update documentation for API changes
-- Use meaningful commit messages
-- Keep PRs focused and atomic
-
-## 📝 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
-## 🙋‍♂️ Support
-
-For questions, issues, or contributions:
-- Open an issue on GitHub
-- Check the troubleshooting section
-- Review existing issues and discussions
 
 ## 📚 Additional Resources
 
