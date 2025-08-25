@@ -104,14 +104,15 @@ jobs:
           docker images
           docker run --name flask-app -d \
           -p 5000:5000 \
-          -e MYSQL_DATABASE_HOST=${{ vars.MYSQL_HOST }} \
-          -e MYSQL_DATABASE_USER=${{ secrets.MYSQL_USERNAME }} \
-          -e MYSQL_DATABASE_PASSWORD=${{ secrets.MYSQL_PASSWORD }} \
-          -e MYSQL_DATABASE_DB=${{ vars.MYSQL_DATABASE }} \
+          -e MYSQL_USER=$MYSQL_USER \
+          -e MYSQL_PASSWORD=$MYSQL_PASSWORD \
+          -e MYSQL_DB=$MYSQL_DB \
+          -e MYSQL_HOST=$MYSQL_HOST \
           ${{ secrets.DOCKERHUB_USERNAME }}/flask-app:${{ github.sha }}
-          sleep 10
-          echo "Testing application health endpoint"
-          curl -f http://127.0.0.1:5000/live || exit 1
+          export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flask-app)
+          echo $IP_ADDRESS
+          echo Testing image URL using wget
+          wget -q -O - 127.0.0.1:5000/live | grep live
 
 
   terraform:
