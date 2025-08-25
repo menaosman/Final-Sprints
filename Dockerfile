@@ -1,35 +1,17 @@
-FROM python:3.11-slim
+FROM node:18-alpine3.17
 
-# Create non-root user
-RUN adduser --disabled-password --gecos '' appuser
+WORKDIR /usr/app
 
-WORKDIR /app
+COPY package*.json /usr/app/
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
-    default-libmysqlclient-dev \
-    pkg-config \
-    gcc \
-    curl \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt .
-
-RUN pip install --no-cache-dir -r requirements.txt
+RUN npm install
 
 COPY . .
 
-# Change ownership to non-root user
-RUN chown -R appuser:appuser /app
+ENV MONGO_URI=uriPlaceholder
+ENV MONGO_USERNAME=usernamePlaceholder
+ENV MONGO_PASSWORD=passwordPlaceholder
 
-# Switch to non-root user
-USER appuser
+EXPOSE 3000
 
-EXPOSE 5000
-
-# Add health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-  CMD curl -f http://localhost:5000/healthz || exit 1
-
-CMD ["python", "app.py"]
+CMD [ "npm", "start" ]

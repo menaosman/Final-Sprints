@@ -1,70 +1,49 @@
-# Kubernetes Deployment with Monitoring
+# Solar System NodeJS Application
 
-This directory contains the Kubernetes manifests for deploying the Python microservice with basic monitoring.
+A simple HTML+MongoDB+NodeJS project to display Solar System and it's planets.
 
-## Files
+---
+## Requirements
 
-- `deployment.yml` - Main application deployment
-- `service.yml` - Service for the application
-- `mysql-secret.yml` - MySQL connection secrets
-- `simple-prometheus.yml` - Basic Prometheus monitoring setup
-- `deploy-all.sh` - Deployment script
-- `cleanup.sh` - Cleanup script
+For development, you will only need Node.js and NPM installed in your environement.
 
-## Quick Start
+### Node
+- #### Node installation on Windows
 
-### Deploy Everything
-```bash
-./deploy-all.sh
-```
+  Just go on [official Node.js website](https://nodejs.org/) and download the installer.
+Also, be sure to have `git` available in your PATH, `npm` might need it (You can find git [here](https://git-scm.com/)).
 
-### Clean Up
-```bash
-./cleanup.sh
-```
+- #### Node installation on Ubuntu
 
-## Manual Deployment
+  You can install nodejs and npm easily with apt install, just run the following commands.
 
-If you prefer to deploy manually:
+      $ sudo apt install nodejs
+      $ sudo apt install npm
 
-1. **Deploy the application:**
-   ```bash
-   kubectl apply -f deployment.yml
-   kubectl apply -f service.yml
-   kubectl apply -f mysql-secret.yml
-   ```
+- #### Other Operating Systems
+  You can find more information about the installation on the [official Node.js website](https://nodejs.org/) and the [official NPM website](https://npmjs.org/).
 
-2. **Deploy monitoring:**
-   ```bash
-   kubectl apply -f simple-prometheus.yml
-   ```
+If the installation was successful, you should be able to run the following command.
 
-## Access Points
+    $ node --version
+    v8.11.3
 
-- **Application:** `http://localhost:8080` (after port-forward)
-- **Prometheus:** `http://localhost:9090` (after port-forward)
-- **Metrics:** `http://localhost:8080/metrics`
+    $ npm --version
+    6.1.0
 
-## Port Forwarding
+---
+## Install Dependencies from `package.json`
+    $ npm install
 
-```bash
-# Application
-kubectl port-forward service/python-microservice-service 8080:5000
+## Run Unit Testing
+    $ npm test
 
-# Prometheus (in another terminal)
-kubectl port-forward service/prometheus 9090:9090 -n monitoring
-```
+## Run Code Coverage
+    $ npm run coverage
 
-## What's Included
+## Run Application
+    $ npm start
 
-- ✅ Python Flask microservice with MySQL
-- ✅ Prometheus metrics collection
-- ✅ Basic monitoring setup
-- ✅ No complex CRDs required
-- ✅ Simple deployment scripts
+## Access Application on Browser
+    http://localhost:3000/
 
-## Notes
-
-- The Flask app now includes Prometheus metrics at `/metrics`
-- Prometheus will automatically scrape metrics every 15 seconds
-- All resources are deployed in the `default` namespace except monitoring (which uses `monitoring` namespace)
