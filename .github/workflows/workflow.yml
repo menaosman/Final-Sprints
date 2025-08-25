@@ -94,6 +94,7 @@ jobs:
           push: true
           tags: |
             mo4222/todoapp:${{ github.sha }}
+            ghcr.io/mo-khaled/todoapp:${{ github.sha }}
 
       - name: Test Docker Image
         run: |
@@ -106,7 +107,9 @@ jobs:
           ${{ secrets.DOCKERHUB_USERNAME }}/todoapp:${{ github.sha }}
           export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' todoapp)
           echo $IP_ADDRESS
-          curl -s http://127.0.0.1:5000/live | grep live
+          sleep 100
+          echo Testing image URL using wget
+          wget -q -O - 127.0.0.1:5000/live | grep live
 
   terraform:
     name: terraform-deployment
