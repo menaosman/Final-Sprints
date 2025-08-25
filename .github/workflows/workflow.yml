@@ -103,15 +103,19 @@ jobs:
         run: |
           docker images
           docker run --name flask-app -d \
-          -p 5000:5000 \
-          -e MYSQL_DATABASE_HOST=${{ vars.MYSQL_HOST }} \
-          -e MYSQL_DATABASE_USER=${{ secrets.MYSQL_USERNAME }} \
-          -e MYSQL_DATABASE_PASSWORD=${{ secrets.MYSQL_PASSWORD }} \
-          -e MYSQL_DATABASE_DB=${{ vars.MYSQL_DATABASE }} \
-          ${{ secrets.DOCKERHUB_USERNAME }}/flask-app:${{ github.sha }}
+            -p 5000:5000 \
+            -e MYSQL_DATABASE_HOST=${{ vars.MYSQL_HOST }} \
+            -e MYSQL_DATABASE_USER=${{ secrets.MYSQL_USERNAME }} \
+            -e MYSQL_DATABASE_PASSWORD=${{ secrets.MYSQL_PASSWORD }} \
+            -e MYSQL_DATABASE_DB=${{ vars.MYSQL_DATABASE }} \
+            ${{ secrets.DOCKERHUB_USERNAME }}/flask-app:${{ github.sha }}
+          
+          echo "Waiting for container to start..."
           sleep 10
-          echo "Testing application health endpoint"
-          curl -f http://127.0.0.1:5000/live || exit 1
+          
+          echo "Testing application health endpoint inside container"
+          docker exec flask-app curl -f http://127.0.0.1:5000/live || exit 1
+
 
   terraform:
     name: terraform-deployment
