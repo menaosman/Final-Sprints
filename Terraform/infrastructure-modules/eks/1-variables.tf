@@ -23,6 +23,8 @@ variable "node_groups" {
   type          = map(object({
     instance_types = list(string)
     capacity_type  = string
+    disk_size      = optional(number, 20)
+    ami_type       = optional(string, "AL2_x86_64")
     scaling_config = object({
       desired_size = number
       max_size     = number

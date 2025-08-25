@@ -18,7 +18,8 @@ resource "aws_iam_role_policy_attachment" "node_policy" {
   for_each = toset([
     "arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy",
     "arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy",
-    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+    "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly",
+    "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
   ])
 
   policy_arn = each.value
@@ -35,6 +36,10 @@ resource "aws_eks_node_group" "main" {
   # Fixed: Added missing configuration
   instance_types = each.value.instance_types
   capacity_type  = each.value.capacity_type
+  
+  # Add disk size and AMI type for better node configuration
+  disk_size = lookup(each.value, "disk_size", 20)
+  ami_type  = lookup(each.value, "ami_type", "AL2_x86_64")
 
   scaling_config {
     desired_size = each.value.scaling_config.desired_size
@@ -46,16 +51,22 @@ resource "aws_eks_node_group" "main" {
     max_unavailable = 1
   }
 
-  # Added: Better launch template configuration
-  launch_template {
-    version = "$Latest"
-  }
+
 
   depends_on = [
     aws_iam_role_policy_attachment.node_policy
   ]
 
+  lifecycle {
+    ignore_changes = [
+      scaling_config[0].desired_size
+    ]
+  }
+
   tags = {
     Name = "${var.cluster_name}-${each.key}-node-group"
+    "kubernetes.io/cluster/${var.cluster_name}" = "owned"
+    "k8s.io/cluster-autoscaler/enabled" = "true"
+    "k8s.io/cluster-autoscaler/${var.cluster_name}" = "owned"
   }
 }
