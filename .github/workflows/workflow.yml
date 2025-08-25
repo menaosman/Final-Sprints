@@ -1,278 +1,267 @@
-name: Microservice Deployment on Kubernetes
+name: solar-system-workflow
 
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
-    inputs:
-      action:
-        description: 'Action to perform'
-        required: true
-        default: 'deploy'
-        type: choice
-        options:
-          - deploy
-          - destroy
+  push:
+    branches:
+      - main
 
 env:
-  AWS_REGION: us-east-1
-  EKS_CLUSTER_NAME: sprints-cluster-0
+  MONGO_URI: 'mongodb+srv://supercluster.d83jj.mongodb.net/superData'
+  MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
+  MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
 
 jobs:
-  setup-backend:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action != 'destroy'
-    
+  unit_testing:
+    name: unit_testing
+    strategy:
+      matrix:
+        nodejs-version: [18, 19, 20]
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        exclude:
+          - nodejs-version: 18
+            os: macos-latest
+    runs-on: ${{ matrix.os }}
     steps:
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js - ${{ matrix.nodejs-version }}
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: ${{ matrix.nodejs-version }}
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Run Tests
+        id: nodeNodeJs-unit-testing-step
+        run: npm test
+
+      - name: Archive Test Results
+        if: steps.nodeNodeJs-unit-testing-step.outcome == 'failure' || steps.nodeNodeJs-unit-testing-step.outcome == 'success'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sp-test-results-${{ matrix.os }}-${{ matrix.nodejs-version }}
+          path: test-results.xml
+
+  code-coverage:
+    name: code-coverage
+    needs: unit_testing
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+
+      - name: Set up Node.js - 18
+        uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 18
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Check Code Coverage
+        continue-on-error: true
+        run: npm run coverage
+
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: code-coverage-results
+          path: coverage
+          retention-days: 5
+
+  docker:
+    name: containerization
+    needs: [unit_testing, code-coverage]
+    permissions:
+      packages: write
+      contents: read
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+
+      - name: Docker Login
+        uses: docker/login-action@v2
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_PASSWORD }}
+
+      - name: GHCR Login
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.repository_owner }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and Push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            mo4222/solar-system:${{ github.sha }}
+            ghcr.io/mo-khaled/solar-system:${{ github.sha }}
+
+
+      - name: Test Docker Image
+        run: |
+          docker images
+          docker run --name solar-system-app -d \
+          -p 3000:3000 \
+          -e MONGO_URI=$MONGO_URI \
+          -e MONGO_USERNAME=$MONGO_USERNAME \
+          -e MONGO_PASSWORD=$MONGO_PASSWORD \
+          ${{ secrets.DOCKERHUB_USERNAME }}/solar-system:${{ github.sha }}
+          export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
+          echo $IP_ADDRESS
+          echo Testing image URL using wget
+          wget -q -O - 127.0.0.1:3000/live | grep live
+
+
+  terraform:
+    name: terraform-deployment
+    needs: [docker, code-coverage, unit_testing]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repo
+        uses: actions/checkout@v5
+
+      - name: AWS Login
+        uses: aws-actions/configure-aws-credentials@v4.3.1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
-      - name: Create S3 bucket for Terraform state
-        run: |
-          # Check if bucket exists, create if not
-          if ! aws s3 ls s3://mokhaled-bucket-1284 2>/dev/null; then
-            echo "Creating S3 bucket..."
-            aws s3 mb s3://mokhaled-bucket-1284 --region us-east-1
-            
-            # Enable versioning
-            aws s3api put-bucket-versioning \
-              --bucket mokhaled-bucket-1284 \
-              --versioning-configuration Status=Enabled
-            
-            # Enable encryption
-            aws s3api put-bucket-encryption \
-              --bucket mokhaled-bucket-1284 \
-              --server-side-encryption-configuration '{
-                "Rules": [{
-                  "ApplyServerSideEncryptionByDefault": {
-                    "SSEAlgorithm": "AES256"
-                  }
-                }]
-              }'
-            
-            # Block public access
-            aws s3api put-public-access-block \
-              --bucket mokhaled-bucket-1284 \
-              --public-access-block-configuration "BlockPublicAcls=true,IgnorePublicAcls=true,BlockPublicPolicy=true,RestrictPublicBuckets=true"
-            
-            echo "S3 bucket created successfully!"
-          else
-            echo "S3 bucket already exists"
-          fi
-
-      - name: Create DynamoDB table for state locking
-        run: |
-          # Check if table exists, create if not
-          if ! aws dynamodb describe-table --table-name terraform-lock --region us-east-1 2>/dev/null; then
-            echo "Creating DynamoDB table..."
-            aws dynamodb create-table \
-              --table-name terraform-lock \
-              --attribute-definitions AttributeName=LockID,AttributeType=S \
-              --key-schema AttributeName=LockID,KeyType=HASH \
-              --provisioned-throughput ReadCapacityUnits=5,WriteCapacityUnits=5 \
-              --region us-east-1
-            
-            # Wait for table to be active
-            echo "Waiting for table to be active..."
-            aws dynamodb wait table-exists --table-name terraform-lock --region us-east-1
-            echo "DynamoDB table created successfully!"
-          else
-            echo "DynamoDB table already exists"
-          fi
-
-  containerization:
-    runs-on: ubuntu-latest
-    outputs:
-      image-tag: ${{ steps.meta.outputs.tags }}
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_PASSWORD }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ secrets.DOCKERHUB_USERNAME }}/python-app
-          tags: |
-            type=ref,event=branch
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Test Docker image locally
-        run: |
-          docker run -d --name test-app -p 5000:5000 \
-            -e MYSQL_DATABASE_HOST=localhost \
-            -e MYSQL_DATABASE_USER=testuser \
-            -e MYSQL_DATABASE_PASSWORD=testpass \
-            -e MYSQL_DATABASE_DB=testdb \
-            ${{ secrets.DOCKERHUB_USERNAME }}/python-app:latest || true
-          sleep 10
-          curl -f http://localhost:5000/ || echo "Health check failed - expected without DB"
-          docker stop test-app || true
-          docker rm test-app || true
-
-  terraform:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action != 'destroy'
-    needs: [setup-backend]
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@v3.1.2
         with:
-          terraform_version: 1.7.0
+          terraform_version: 1.1.7
 
       - name: Terraform Init
-        run: |
-          cd Terraform/team1
-          terraform init
+        run: terraform init
+        working-directory: ./Terraform/team1
 
       - name: Terraform Plan
-        run: |
-          cd Terraform/team1
-          terraform plan
+        run: terraform plan
+        working-directory: ./Terraform/team1
 
-      - name: Terraform Apply
-        if: github.ref == 'refs/heads/main'
+      - name: Terraform Apply or Destroy
         run: |
-          cd Terraform/team1
-          terraform apply -auto-approve
+          if [ "${{ github.event.inputs.destroy }}" = "yes" ]; then
+            terraform destroy -auto-approve
+          else
+            terraform apply -auto-approve
+          fi
+        working-directory: ./Terraform/team1
 
-  deployment:
+  deploy:
+    needs: terraform
+    name: deploy to EKS
     runs-on: ubuntu-latest
-    needs: [containerization, terraform]
-    if: always() && (needs.containerization.result == 'success')
-    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+      - name: Checkout Config Files
+        uses: actions/checkout@v5
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4.3.1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+          aws-region: us-east-1
 
       - name: Update kubeconfig
         run: |
-          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
+          aws eks --region us-east-1 update-kubeconfig --name sprints-cluster-0
 
-      - name: Create MySQL Secret
-        run: |
-          envsubst < k8s/mysql-secret.yml | kubectl apply -f -
+      - name: Trigger App Deployment
+        uses: statsig-io/kubectl-via-eksctl@main
         env:
-          MYSQL_USERNAME: ${{ secrets.MYSQL_USERNAME }}
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          region: us-east-1
+          cluster: sprints-cluster-0
 
-      - name: Deploy to Kubernetes
+      - name: Deploy K8s Deployments
         run: |
-          # Replace placeholders in deployment
-          envsubst < k8s/deployment.yml | kubectl apply -f -
-          
-          # Apply service
-          kubectl apply -f k8s/service.yml
-          
-          # Wait for deployment rollout with better timeout handling
-          kubectl rollout status deployment/python-microservice --timeout=600s
-          
-          # If rollout fails, get diagnostic information
-          kubectl get pods -l app=python-microservice || echo "No pods found"
-          kubectl describe deployment python-microservice || echo "Deployment description failed"
-          
-          # Get pod logs for troubleshooting
-          POD_NAME=$(kubectl get pods -l app=python-microservice -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
-          if [ ! -z "$POD_NAME" ]; then
-            echo "Pod logs for: $POD_NAME"
-            kubectl logs $POD_NAME --tail=50 || echo "Failed to get logs"
-          fi
-          
-          # Deploy monitoring (optional)
-          kubectl apply -f k8s/simple-prometheus.yml || echo "Monitoring deployment failed, continuing..."
-          
-          # Display service information
-          kubectl get svc python-microservice-service
-        env:
-          MYSQL_HOST: ${{ vars.MYSQL_HOST }}
-          MYSQL_DATABASE: ${{ vars.MYSQL_DATABASE }}
-          DOCKER_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/python-app:${{ github.sha }}
+          kubectl apply -f deployment.yml
+          kubectl apply -f service.yml
+        working-directory: ./k8s
 
       - name: Verify Deployment
         run: |
-          echo "Checking pod status..."
-          kubectl get pods -l app=python-microservice
-          
-          echo "Checking service status..."
-          kubectl get svc python-microservice-service
-          
-          echo "Getting external URL..."
-          kubectl get svc python-microservice-service -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' || echo "LoadBalancer URL not ready yet"
+          kubectl get pods
+          kubectl get svc
+  deploy-monitoring:
+        needs: deploy
+        name: deploy to EKS
+        runs-on: ubuntu-latest
+        env: 
+          AWS_REGION: us-west-2
+          EKS_CLUSTER_NAME: stage-eks-cluster
+          GRAFANA_ADMIN_PASSWORD: ${{ secrets.grafana_admin_password }}
 
-  destroy:
-    runs-on: ubuntu-latest
-    if: github.event.inputs.action == 'destroy'
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+        steps:
+            - name: checkout config files
+              uses: actions/checkout@v5
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
 
-      - name: Update kubeconfig
-        run: |
-          aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }} || true
+            - name: Configure AWS Credentials
+              uses: aws-actions/configure-aws-credentials@v4.3.1
+              with:
+                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                  aws-region: us-east-1
 
-      - name: Delete Kubernetes resources
-        run: |
-          kubectl delete -f k8s/ || true
-        continue-on-error: true
+            - name: update kubeconfig
+              run: | 
+                    aws eks --region us-east-1 update-kubeconfig --name stage-eks-cluster
 
-      - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.7.0
+            - name: Trigger app deployment
+              uses: statsig-io/kubectl-via-eksctl@main
+              env:
+                 aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+                 aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+                 region: us-east-1
+                 cluster: stage-eks-cluster
 
-      - name: Terraform Destroy
-        run: |
-          cd Terraform/team1
-          terraform init
-          terraform destroy -auto-approve
+            - name: Output monitoring namespace YAML
+              run: kubectl create namespace monitoring --dry-run=client -o yaml
+            - name: Create monitoring namespace
+              run: kubectl create namespace monitoring || true
+
+            - name: Add Helm repos
+              run: |
+                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+                helm repo add grafana https://grafana.github.io/helm-charts
+                helm repo update
+            - name: Render values with env
+              run: |
+               envsubst < values.yml > /tmp/values.rendered.yml
+               echo "Rendered values:"
+               tail -n +1 /tmp/values.rendered.yml
+              working-directory: ./kubernetes
+
+            - name: Install/Upgrade kube-prometheus-stack
+              run: |
+                helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+                  --namespace monitoring \
+                  --values /tmp/values.rendered.yml \
+                  --wait --timeout 15m
+            - name: Apply ServiceMonitor for my app
+              run: |
+                kubectl apply -f servicemonitor.yml
+              working-directory: ./kubernetes
+
+            - name: Show external endpoints
+              run: |
+                echo "Waiting for LoadBalancer IPs..."
+                kubectl -n monitoring wait --for=condition=available deploy/kube-prometheus-stack-grafana --timeout=10m
+                kubectl -n monitoring get svc -o wide
+                echo "Grafana URL:"
+                kubectl -n monitoring get svc kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
+                echo "Prometheus URL:"
+                kubectl -n monitoring get svc kube-prometheus-stack-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
