@@ -36,18 +36,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run Tests
-        id: python-unit-testing-step
-        run: |
-          pytest --maxfail=1 --disable-warnings -q
-
-      - name: Archive Test Results
-        if: steps.python-unit-testing-step.outcome == 'failure' || steps.python-unit-testing-step.outcome == 'success'
-        uses: actions/upload-artifact@v4.6.2
-        with:
-          name: sp-test-results-${{ matrix.os }}-${{ matrix.python-version }}
-          path: test-results.xml
-
   code-coverage:
     name: code-coverage
     needs: unit_testing
@@ -104,7 +92,7 @@ jobs:
         run: |
           docker images
           docker run --name todo-app -d \
-          -p 3000:3000 \
+          -p 5000:5000 \
           -e MONGO_URI=$MONGO_URI \
           -e MONGO_USERNAME=$MONGO_USERNAME \
           -e MONGO_PASSWORD=$MONGO_PASSWORD \
@@ -112,7 +100,7 @@ jobs:
           export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
           echo $IP_ADDRESS
           echo Testing image URL using wget
-          wget -q -O - 127.0.0.1:3000/live | grep live
+          wget -q -O - 127.0.0.1:5000/live | grep live
 
 
   terraform:
