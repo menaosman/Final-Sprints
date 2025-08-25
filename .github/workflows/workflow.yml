@@ -1,4 +1,4 @@
-name: to-do-workflow
+name: todo-flask-workflow
 
 on:
   workflow_dispatch:
@@ -16,10 +16,10 @@ jobs:
     name: unit_testing
     strategy:
       matrix:
-        python-version: [3.8, 3.9, 3.10]
+        python-version: ['3.9', '3.10', '3.11', '3.12']
         os: [ubuntu-latest, windows-latest, macos-latest]
         exclude:
-          - python-version: 3.8
+          - python-version: '3.9'
             os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Set up Python - ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
 
@@ -35,6 +35,21 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest pytest-cov pytest-html
+
+      - name: Run Tests
+        id: python-unit-testing-step
+        run: |
+          pytest --junitxml=test-results.xml --html=test-report.html --cov=app --cov-report=xml
+
+      - name: Archive Test Results
+        if: steps.python-unit-testing-step.outcome == 'failure' || steps.python-unit-testing-step.outcome == 'success'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: test-results-${{ matrix.os }}-${{ matrix.python-version }}
+          path: |
+            test-results.xml
+            test-report.html
 
   code-coverage:
     name: code-coverage
@@ -44,15 +59,31 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v5
 
-      - name: Set up Python - 3.10
-        uses: actions/setup-python@v4
+      - name: Set up Python - 3.11
+        uses: actions/setup-python@v5
         with:
-          python-version: '3.10'
+          python-version: '3.11'
 
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pytest pytest-cov coverage
+
+      - name: Check Code Coverage
+        continue-on-error: true
+        run: |
+          pytest --cov=app --cov-report=html --cov-report=xml
+          coverage html
+
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: code-coverage-results
+          path: |
+            htmlcov/
+            coverage.xml
+          retention-days: 5
 
   docker:
     name: containerization
@@ -84,9 +115,8 @@ jobs:
           context: .
           push: true
           tags: |
-            mo4222/solar-system:${{ github.sha }}
+            mo4222/todo-app:${{ github.sha }}
             ghcr.io/mo-khaled/todo-app:${{ github.sha }}
-
 
       - name: Test Docker Image
         run: |
@@ -96,12 +126,12 @@ jobs:
           -e MONGO_URI=$MONGO_URI \
           -e MONGO_USERNAME=$MONGO_USERNAME \
           -e MONGO_PASSWORD=$MONGO_PASSWORD \
-          ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:${{ github.sha }}
-          export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
-          echo $IP_ADDRESS
-          echo Testing image URL using wget
-          wget -q -O - 127.0.0.1:5000/live | grep live
-
+          mo4222/todo-app:${{ github.sha }}
+          sleep 10
+          echo "Testing Flask app health"
+          curl -f http://127.0.0.1:5000/ || exit 1
+          docker stop todo-app
+          docker rm todo-app
 
   terraform:
     name: terraform-deployment
@@ -177,75 +207,76 @@ jobs:
         run: |
           kubectl get pods
           kubectl get svc
+
   deploy-monitoring:
-        needs: deploy
-        name: deploy to EKS
-        runs-on: ubuntu-latest
-        env: 
-          AWS_REGION: us-west-2
-          EKS_CLUSTER_NAME: stage-eks-cluster
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.grafana_admin_password }}
+    needs: deploy
+    name: deploy monitoring
+    runs-on: ubuntu-latest
+    env: 
+      AWS_REGION: us-east-1
+      EKS_CLUSTER_NAME: sprints-cluster-0
+      GRAFANA_ADMIN_PASSWORD: ${{ secrets.grafana_admin_password }}
 
-        steps:
-            - name: checkout config files
-              uses: actions/checkout@v5
+    steps:
+      - name: Checkout config files
+        uses: actions/checkout@v5
 
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4.3.1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
 
-            - name: Configure AWS Credentials
-              uses: aws-actions/configure-aws-credentials@v4.3.1
-              with:
-                  aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                  aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-                  aws-region: us-east-1
+      - name: Update kubeconfig
+        run: | 
+          aws eks --region us-east-1 update-kubeconfig --name sprints-cluster-0
 
-            - name: update kubeconfig
-              run: | 
-                    aws eks --region us-east-1 update-kubeconfig --name stage-eks-cluster
+      - name: Trigger app deployment
+        uses: statsig-io/kubectl-via-eksctl@main
+        env:
+          aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          region: us-east-1
+          cluster: sprints-cluster-0
 
-            - name: Trigger app deployment
-              uses: statsig-io/kubectl-via-eksctl@main
-              env:
-                 aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-                 aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-                 region: us-east-1
-                 cluster: stage-eks-cluster
+      - name: Output monitoring namespace YAML
+        run: kubectl create namespace monitoring --dry-run=client -o yaml
 
-            - name: Output monitoring namespace YAML
-              run: kubectl create namespace monitoring --dry-run=client -o yaml
-            - name: Create monitoring namespace
-              run: kubectl create namespace monitoring || true
+      - name: Create monitoring namespace
+        run: kubectl create namespace monitoring || true
 
-            - name: Add Helm repos
-              run: |
-                helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
-                helm repo add grafana https://grafana.github.io/helm-charts
-                helm repo update
-            - name: Render values with env
-              run: |
-               envsubst < values.yml > /tmp/values.rendered.yml
-               echo "Rendered values:"
-               tail -n +1 /tmp/values.rendered.yml
-              working-directory: ./kubernetes
+      - name: Add Helm repos
+        run: |
+          helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+          helm repo add grafana https://grafana.github.io/helm-charts
+          helm repo update
 
-            - name: Install/Upgrade kube-prometheus-stack
-              run: |
-                helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
-                  --namespace monitoring \
-                  --values /tmp/values.rendered.yml \
-                  --wait --timeout 15m
-            - name: Apply ServiceMonitor for my app
-              run: |
-                kubectl apply -f servicemonitor.yml
-              working-directory: ./kubernetes
+      - name: Render values with env
+        run: |
+          envsubst < values.yml > /tmp/values.rendered.yml
+          echo "Rendered values:"
+          tail -n +1 /tmp/values.rendered.yml
+        working-directory: ./k8s
 
-            - name: Show external endpoints
-              run: |
-                echo "Waiting for LoadBalancer IPs..."
-                kubectl -n monitoring wait --for=condition=available deploy/kube-prometheus-stack-grafana --timeout=10m
-                kubectl -n monitoring get svc -o wide
-                echo "Grafana URL:"
-                kubectl -n monitoring get svc kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
-                echo "Prometheus URL:"
-                kubectl -n monitoring get svc kube-prometheus-stack-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
+      - name: Install/Upgrade kube-prometheus-stack
+        run: |
+          helm upgrade --install kube-prometheus-stack prometheus-community/kube-prometheus-stack \
+            --namespace monitoring \
+            --values /tmp/values.rendered.yml \
+            --wait --timeout 15m
 
-                    
+      - name: Apply ServiceMonitor for my app
+        run: |
+          kubectl apply -f servicemonitor.yml
+        working-directory: ./k8s
+
+      - name: Show external endpoints
+        run: |
+          echo "Waiting for LoadBalancer IPs..."
+          kubectl -n monitoring wait --for=condition=available deploy/kube-prometheus-stack-grafana --timeout=10m
+          kubectl -n monitoring get svc -o wide
+          echo "Grafana URL:"
+          kubectl -n monitoring get svc kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
+          echo "Prometheus URL:"
+          kubectl -n monitoring get svc kube-prometheus-stack-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
