@@ -11,6 +11,10 @@ db = client["todo_db"]
 tasks_collection = db["tasks"]
 
 # --- Routes ---
+@app.route("/live")
+def live():
+    return "live"
+
 @app.route("/")
 def index():
     tasks = list(tasks_collection.find())
