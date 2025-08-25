@@ -1,4 +1,4 @@
-name: soalr system workflow
+name: destroy workflow
 
 on:
     workflow_dispatch:
