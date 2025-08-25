@@ -8,16 +8,16 @@ mysql = MySQL()
 
 # Get database configuration from environment variables
 # These should match your GitHub secrets/variables
-mysql_host = os.environ.get('MYSQL_DATABASE_HOST', 'localhost')
-mysql_user = os.environ.get('MYSQL_DATABASE_USER', 'db_user') 
-mysql_password = os.environ.get('MYSQL_DATABASE_PASSWORD', 'Passw0rd')
-mysql_db = os.environ.get('MYSQL_DATABASE_DB', 'employee_db')
+mysql_host = os.environ.get('MYSQL_HOST', 'localhost')
+mysql_user = os.environ.get('MYSQL_USER', 'db_user') 
+mysql_password = os.environ.get('MYSQL_PASSWORD', 'Passw0rd')
+mysql_db = os.environ.get('MYSQL_DB', 'employee_db')
 
 # MySQL configurations
-app.config['MYSQL_DATABASE_USER'] = mysql_user
-app.config['MYSQL_DATABASE_PASSWORD'] = mysql_password
-app.config['MYSQL_DATABASE_DB'] = mysql_db
-app.config['MYSQL_DATABASE_HOST'] = mysql_host
+app.config['MYSQL_USER'] = mysql_user
+app.config['MYSQL_PASSWORD'] = mysql_password
+app.config['MYSQL_DB'] = mysql_db
+app.config['MYSQL_HOST'] = mysql_host
 
 mysql.init_app(app)
 
