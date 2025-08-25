@@ -7,10 +7,10 @@ on:
       - main
 
 env:
-  MYSQL_DATABASE_HOST: ${{ vars.MYSQL_HOST }}
-  MYSQL_DATABASE_USER: ${{ secrets.MYSQL_USERNAME }}
-  MYSQL_DATABASE_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-  MYSQL_DATABASE_DB: ${{ vars.MYSQL_DATABASE }}
+  MYSQL_HOST: ${{ vars.MYSQL_HOST }}
+  MYSQL_USER: ${{ secrets.MYSQL_USERNAME }}
+  MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+  MYSQL_DB: ${{ vars.MYSQL_DATABASE }}
 
 jobs:
   unit_testing:
