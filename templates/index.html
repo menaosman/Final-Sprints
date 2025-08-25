@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>To-Do List</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 40px; }
+        h1 { color: #333; }
+        form { margin-bottom: 20px; }
+        input[type=text] { padding: 8px; width: 250px; }
+        button { padding: 8px 12px; margin-left: 5px; }
+        ul { list-style-type: none; padding: 0; }
+        li { padding: 6px; background: #f4f4f4; margin-bottom: 5px; border-radius: 4px; }
+        a { color: red; text-decoration: none; margin-left: 10px; }
+    </style>
+</head>
+<body>
+    <h1>To-Do List</h1>
+    <form action="{{ url_for('add_task') }}" method="POST">
+        <input type="text" name="task" placeholder="Enter new task" required>
+        <button type="submit">Add</button>
+    </form>
+        <ul>
+            {% for task in tasks %}
+                <li>{{ task['task'] }}
+                    <a href="{{ url_for('delete_task', task_id=task['_id']|string) }}">❌</a>
+                </li>
+            {% endfor %}
+        </ul>
+
+</body>
+</html>

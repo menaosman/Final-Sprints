@@ -1,30 +1,16 @@
-FROM python:3.9-slim
+FROM python:3.10-slim
 
-WORKDIR /usr/app
+WORKDIR /app
 
-# Install system dependencies for MySQL client
-RUN apt-get update && apt-get install -y \
-    default-libmysqlclient-dev \
-    build-essential \
-    pkg-config \
-    && rm -rf /var/lib/apt/lists/*
-
-# Copy requirements file
-COPY requirements.txt /usr/app/
-
-# Install Python dependencies
+COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
 COPY . .
 
-# Set environment variables
-ENV MYSQL_DATABASE_HOST=mysql-service
-ENV FLASK_APP=app.py
-ENV FLASK_ENV=production
+ENV MONGO_URI=mongodb://mongodb:27017/
+ENV MONGO_USERNAME=root
+ENV MONGO_PASSWORD=secret
 
-# Expose port
 EXPOSE 5000
 
-# Run the application
 CMD ["python", "app.py"]

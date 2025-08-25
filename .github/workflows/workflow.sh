@@ -1,4 +1,4 @@
-name: flask-employee-workflow
+name: to-do-workflow
 
 on:
   workflow_dispatch:
@@ -7,40 +7,43 @@ on:
       - main
 
 env:
-  MYSQL_HOST: ${{ vars.MYSQL_HOST }}
-  MYSQL_USER: ${{ secrets.MYSQL_USERNAME }}
-  MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-  MYSQL_DB: ${{ vars.MYSQL_DATABASE }}
+  MONGO_URI: 'mongodb://mongodb:27017/'
+  MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
+  MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
 
 jobs:
   unit_testing:
     name: unit_testing
     strategy:
       matrix:
-        python-version: [3.8, 3.9, '3.10']
-        os: [ubuntu-latest]
+        nodejs-version: [18, 19, 20]
+        os: [ubuntu-latest, windows-latest, macos-latest]
         exclude:
-          - python-version: 3.8
+          - nodejs-version: 18
             os: macos-latest
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v5
 
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Set up Node.js - ${{ matrix.nodejs-version }}
+        uses: actions/setup-node@v4.4.0
         with:
-          python-version: ${{ matrix.python-version }}
+          node-version: ${{ matrix.nodejs-version }}
 
       - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-flask
+        run: npm install
 
       - name: Run Tests
-        id: python-unit-testing-step
-        run: pytest --tb=short || echo "Tests completed"
+        id: nodeNodeJs-unit-testing-step
+        run: npm test
+
+      - name: Archive Test Results
+        if: steps.nodeNodeJs-unit-testing-step.outcome == 'failure' || steps.nodeNodeJs-unit-testing-step.outcome == 'success'
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: sp-test-results-${{ matrix.os }}-${{ matrix.nodejs-version }}
+          path: test-results.xml
 
   code-coverage:
     name: code-coverage
@@ -50,21 +53,24 @@ jobs:
       - name: Checkout Repo
         uses: actions/checkout@v5
 
-      - name: Set up Python 3.9
-        uses: actions/setup-python@v4
+      - name: Set up Node.js - 18
+        uses: actions/setup-node@v4.4.0
         with:
-          python-version: 3.9
+          node-version: 18
 
       - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r requirements.txt
-          pip install pytest pytest-cov
+        run: npm install
 
       - name: Check Code Coverage
         continue-on-error: true
-        run: pytest --cov=app --cov-report=html --cov-report=xml || echo "Coverage completed"
+        run: npm run coverage
 
+      - name: Archive Coverage Results
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: code-coverage-results
+          path: coverage
+          retention-days: 5
 
   docker:
     name: containerization
@@ -96,23 +102,23 @@ jobs:
           context: .
           push: true
           tags: |
-            mo4222/flask-app:${{ github.sha }}
-            ghcr.io/mo-khaled/flask-app:${{ github.sha }}
+            mo4222/solar-system:${{ github.sha }}
+            ghcr.io/mo-khaled/todo-app:${{ github.sha }}
+
 
       - name: Test Docker Image
         run: |
           docker images
-          docker run --name flask-app -d \
-          -p 5000:5000 \
-          -e MYSQL_USER=$MYSQL_USER \
-          -e MYSQL_PASSWORD=$MYSQL_PASSWORD \
-          -e MYSQL_DB=$MYSQL_DB \
-          -e MYSQL_HOST=$MYSQL_HOST \
-          ${{ secrets.DOCKERHUB_USERNAME }}/flask-app:${{ github.sha }}
-          export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' flask-app)
+          docker run --name todo-app -d \
+          -p 3000:3000 \
+          -e MONGO_URI=$MONGO_URI \
+          -e MONGO_USERNAME=$MONGO_USERNAME \
+          -e MONGO_PASSWORD=$MONGO_PASSWORD \
+          ${{ secrets.DOCKERHUB_USERNAME }}/todo-app:${{ github.sha }}
+          export IP_ADDRESS=$(docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' solar-system-app)
           echo $IP_ADDRESS
           echo Testing image URL using wget
-          wget -q -O - 127.0.0.1:5000/live | grep live
+          wget -q -O - 127.0.0.1:3000/live | grep live
 
 
   terraform:
@@ -179,10 +185,8 @@ jobs:
           region: us-east-1
           cluster: sprints-cluster-0
 
-      - name: Deploy K8s Resources
+      - name: Deploy K8s Deployments
         run: |
-          kubectl apply -f mysql-secret.yml
-          kubectl apply -f mysql-deployment.yml
           kubectl apply -f deployment.yml
           kubectl apply -f service.yml
         working-directory: ./k8s
@@ -191,19 +195,19 @@ jobs:
         run: |
           kubectl get pods
           kubectl get svc
-
   deploy-monitoring:
         needs: deploy
-        name: deploy monitoring to EKS
+        name: deploy to EKS
         runs-on: ubuntu-latest
         env: 
-          AWS_REGION: us-east-1
-          EKS_CLUSTER_NAME: sprints-cluster-0
+          AWS_REGION: us-west-2
+          EKS_CLUSTER_NAME: stage-eks-cluster
           GRAFANA_ADMIN_PASSWORD: ${{ secrets.grafana_admin_password }}
 
         steps:
             - name: checkout config files
               uses: actions/checkout@v5
+
 
             - name: Configure AWS Credentials
               uses: aws-actions/configure-aws-credentials@v4.3.1
@@ -214,7 +218,7 @@ jobs:
 
             - name: update kubeconfig
               run: | 
-                    aws eks --region us-east-1 update-kubeconfig --name sprints-cluster-0
+                    aws eks --region us-east-1 update-kubeconfig --name stage-eks-cluster
 
             - name: Trigger app deployment
               uses: statsig-io/kubectl-via-eksctl@main
@@ -222,7 +226,7 @@ jobs:
                  aws_access_key_id: ${{ secrets.AWS_ACCESS_KEY_ID }}
                  aws_secret_access_key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
                  region: us-east-1
-                 cluster: sprints-cluster-0
+                 cluster: stage-eks-cluster
 
             - name: Output monitoring namespace YAML
               run: kubectl create namespace monitoring --dry-run=client -o yaml
@@ -239,7 +243,7 @@ jobs:
                envsubst < values.yml > /tmp/values.rendered.yml
                echo "Rendered values:"
                tail -n +1 /tmp/values.rendered.yml
-              working-directory: ./k8s
+              working-directory: ./kubernetes
 
             - name: Install/Upgrade kube-prometheus-stack
               run: |
@@ -250,7 +254,7 @@ jobs:
             - name: Apply ServiceMonitor for my app
               run: |
                 kubectl apply -f servicemonitor.yml
-              working-directory: ./k8s
+              working-directory: ./kubernetes
 
             - name: Show external endpoints
               run: |
@@ -261,3 +265,5 @@ jobs:
                 kubectl -n monitoring get svc kube-prometheus-stack-grafana -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
                 echo "Prometheus URL:"
                 kubectl -n monitoring get svc kube-prometheus-stack-prometheus -o jsonpath='{.status.loadBalancer.ingress[0].hostname}{"\n"}{.status.loadBalancer.ingress[0].ip}{"\n"}'
+
+                    

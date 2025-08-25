@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
  name: flask-microservice
 spec:
-  replicas: 3
+  replicas: 2
   selector:
    matchLabels:
     app: flask-microservice
@@ -14,21 +14,6 @@ spec:
    spec:
     containers:
     - name: flask-microservice
-      image: mo4222/solar-system:latest
+      image: mo4222/todo-app:latest
       ports:
       - containerPort: 5000
-      env:
-      - name: MYSQL_DATABASE_HOST
-        value: "mysql-service"
-      - name: MYSQL_DATABASE_USER
-        valueFrom:
-          secretKeyRef:
-            name: mysql-secret
-            key: username
-      - name: MYSQL_DATABASE_PASSWORD
-        valueFrom:
-          secretKeyRef:
-            name: mysql-secret
-            key: password
-      - name: MYSQL_DATABASE_DB
-        value: "employee_db"

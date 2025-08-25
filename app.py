@@ -1,57 +1,33 @@
+from flask import Flask, render_template, request, redirect, url_for
+from pymongo import MongoClient
 import os
-from flask import Flask
-from flask_mysqldb import MySQL
-
 
 app = Flask(__name__)
-mysql = MySQL()
 
-# Get database configuration from environment variables
-# These should match your GitHub secrets/variables
-mysql_host = os.environ.get('MYSQL_HOST', 'localhost')
-mysql_user = os.environ.get('MYSQL_USER', 'db_user') 
-mysql_password = os.environ.get('MYSQL_PASSWORD', 'Passw0rd')
-mysql_db = os.environ.get('MYSQL_DB', 'employee_db')
+# --- MongoDB Connection ---
+mongo_uri = os.getenv("MONGO_URI", "mongodb://localhost:27017/")
+client = MongoClient(mongo_uri)
+db = client["todo_db"]
+tasks_collection = db["tasks"]
 
-# MySQL configurations
-app.config['MYSQL_USER'] = mysql_user
-app.config['MYSQL_PASSWORD'] = mysql_password
-app.config['MYSQL_DB'] = mysql_db
-app.config['MYSQL_HOST'] = mysql_host
-
-mysql.init_app(app)
-
+# --- Routes ---
 @app.route("/")
-def main():
-    return "Welcome to Employee Management System!"
+def index():
+    tasks = list(tasks_collection.find())
+    return render_template("index.html", tasks=tasks)
 
-@app.route("/health")
-def health():
-    return "OK"
+@app.route("/add", methods=["POST"])
+def add_task():
+    task = request.form.get("task")
+    if task:
+        tasks_collection.insert_one({"task": task})
+    return redirect(url_for("index"))
 
-@app.route("/live")
-def live():
-    return "live"
-
-@app.route('/how-are-you')
-def hello():
-    return 'I am good, how about you?'
-
-@app.route('/employees')
-def read():
-    try:
-        conn = mysql.connect()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM employees")
-        rows = cursor.fetchall()
-        result = []
-        for row in rows:
-            result.append(str(row[0]))
-        cursor.close()
-        conn.close()
-        return ",".join(result) if result else "No employees found"
-    except Exception as e:
-        return f"Database error: {str(e)}", 500
+@app.route("/delete/<task_id>")
+def delete_task(task_id):
+    from bson.objectid import ObjectId
+    tasks_collection.delete_one({"_id": ObjectId(task_id)})
+    return redirect(url_for("index"))
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=True)
