@@ -204,12 +204,14 @@ jobs:
           # Replace placeholders in deployment
           envsubst < k8s/deployment.yml | kubectl apply -f -
           
-          # Apply service and monitoring
+          # Apply service
           kubectl apply -f k8s/service.yml
-          kubectl apply -f k8s/servicemonitor.yml
           
           # Wait for deployment rollout
           kubectl rollout status deployment/python-microservice --timeout=300s
+          
+          # Deploy monitoring (optional)
+          kubectl apply -f k8s/simple-prometheus.yml || echo "Monitoring deployment failed, continuing..."
           
           # Display service information
           kubectl get svc python-microservice-service
