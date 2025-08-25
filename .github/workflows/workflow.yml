@@ -177,6 +177,7 @@ jobs:
 
       - name: Deploy K8s Deployments
         run: |
+          kubectl apply -f mongodb.yml
           kubectl apply -f deployment.yml
           kubectl apply -f service.yml
         working-directory: ./k8s
