@@ -1,42 +1,56 @@
 import os
 from flask import Flask
-from flaskext.mysql import MySQL      # For newer versions of flask-mysql
-# from flask.ext.mysql import MySQL   # For older versions of flask-mysql
-app = Flask(__name__)
+from flaskext.mysql import MySQL
 
+app = Flask(__name__)
 mysql = MySQL()
 
-mysql_database_host = 'MYSQL_DATABASE_HOST' in os.environ and os.environ['MYSQL_DATABASE_HOST'] or  'localhost'
+# Get database configuration from environment variables
+# These should match your GitHub secrets/variables
+mysql_host = os.environ.get('MYSQL_DATABASE_HOST', 'localhost')
+mysql_user = os.environ.get('MYSQL_DATABASE_USER', 'db_user') 
+mysql_password = os.environ.get('MYSQL_DATABASE_PASSWORD', 'Passw0rd')
+mysql_db = os.environ.get('MYSQL_DATABASE_DB', 'employee_db')
 
 # MySQL configurations
-app.config['MYSQL_DATABASE_USER'] = 'db_user'
-app.config['MYSQL_DATABASE_PASSWORD'] = 'Passw0rd'
-app.config['MYSQL_DATABASE_DB'] = 'employee_db'
-app.config['MYSQL_DATABASE_HOST'] = mysql_database_host
+app.config['MYSQL_DATABASE_USER'] = mysql_user
+app.config['MYSQL_DATABASE_PASSWORD'] = mysql_password
+app.config['MYSQL_DATABASE_DB'] = mysql_db
+app.config['MYSQL_DATABASE_HOST'] = mysql_host
+
 mysql.init_app(app)
-
-conn = mysql.connect()
-
-cursor = conn.cursor()
 
 @app.route("/")
 def main():
-    return "Welcome!"
+    return "Welcome to Employee Management System!"
 
-@app.route('/how are you')
+@app.route("/health")
+def health():
+    return "OK"
+
+@app.route("/live")
+def live():
+    return "live"
+
+@app.route('/how-are-you')
 def hello():
     return 'I am good, how about you?'
 
-@app.route('/read from database')
+@app.route('/employees')
 def read():
-    cursor.execute("SELECT * FROM employees")
-    row = cursor.fetchone()
-    result = []
-    while row is not None:
-      result.append(row[0])
-      row = cursor.fetchone()
-
-    return ",".join(result)
+    try:
+        conn = mysql.connect()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM employees")
+        rows = cursor.fetchall()
+        result = []
+        for row in rows:
+            result.append(str(row[0]))
+        cursor.close()
+        conn.close()
+        return ",".join(result) if result else "No employees found"
+    except Exception as e:
+        return f"Database error: {str(e)}", 500
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0', port=5000, debug=False)

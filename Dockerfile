@@ -1,17 +1,30 @@
-FROM node:18-alpine3.17
+FROM python:3.9-slim
 
 WORKDIR /usr/app
 
-COPY package*.json /usr/app/
+# Install system dependencies for MySQL client
+RUN apt-get update && apt-get install -y \
+    default-libmysqlclient-dev \
+    build-essential \
+    pkg-config \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN npm install
+# Copy requirements file
+COPY requirements.txt /usr/app/
 
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
 COPY . .
 
-ENV MONGO_URI=mongodb+srv://supercluster.d83jj.mongodb.net/superData
-ENV MONGO_USERNAME=superuser
-ENV MONGO_PASSWORD=SuperPassword
+# Set environment variables
+ENV MYSQL_DATABASE_HOST=mysql-service
+ENV FLASK_APP=app.py
+ENV FLASK_ENV=production
 
-EXPOSE 3000
+# Expose port
+EXPOSE 5000
 
-CMD [ "npm", "start" ]
+# Run the application
+CMD ["python", "app.py"]

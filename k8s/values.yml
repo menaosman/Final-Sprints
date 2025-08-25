@@ -1,12 +1,12 @@
 grafana:
- adminPassword: "${grafana_admin_password}"
+ adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
  service:
   type: LoadBalancer
  persistence:
   enabled: false
 prometheus:
  prometheusSpec:
-  ServiceMonitorSelectorNiUsesHelmValues: false
+  serviceMonitorSelectorNilUsesHelmValues: false
  service:
   type: LoadBalancer
 
@@ -20,4 +20,3 @@ prometheusOperator:
    memory: 200Mi
  admissionWebhooks:
   enabled: true
-
