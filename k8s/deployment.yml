@@ -6,6 +6,11 @@ metadata:
     app: python-microservice
 spec:
   replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
   selector:
     matchLabels:
       app: python-microservice
@@ -17,6 +22,7 @@ spec:
       containers:
       - name: python-microservice
         image: ${DOCKER_IMAGE}  # Will be replaced by GitHub Actions
+        imagePullPolicy: Always
         ports:
         - containerPort: 5000
           name: http
@@ -37,27 +43,35 @@ spec:
           value: "${MYSQL_DATABASE}"  # Will be replaced by GitHub Actions
         resources:
           limits:
-            cpu: 500m
-            memory: 512Mi
+            cpu: 1000m
+            memory: 1Gi
           requests:
-            cpu: 100m
-            memory: 128Mi
+            cpu: 200m
+            memory: 256Mi
         livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 5000
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 5
+        startupProbe:
           httpGet:
             path: /healthz
             port: 5000
           initialDelaySeconds: 30
           periodSeconds: 10
-          timeoutSeconds: 5
-          failureThreshold: 3
+          timeoutSeconds: 8
+          failureThreshold: 30
         readinessProbe:
           httpGet:
             path: /healthz
             port: 5000
-          initialDelaySeconds: 5
-          periodSeconds: 5
-          timeoutSeconds: 3
-          failureThreshold: 3
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 8
+          failureThreshold: 5
         securityContext:
           runAsNonRoot: true
           runAsUser: 1000

@@ -17,7 +17,12 @@ kubectl apply -f mysql-secret.yml
 
 # Wait for the application to be ready
 echo "⏳ Waiting for application to be ready..."
-kubectl wait --for=condition=available --timeout=300s deployment/python-microservice
+kubectl wait --for=condition=available --timeout=600s deployment/python-microservice
+
+# Check pod status if there are issues
+echo "🔍 Checking pod status..."
+kubectl get pods -l app=python-microservice
+kubectl describe deployment python-microservice
 
 # Deploy Prometheus (simple version without CRDs)
 echo "📊 Deploying Prometheus..."

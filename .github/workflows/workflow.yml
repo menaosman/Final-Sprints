@@ -207,8 +207,19 @@ jobs:
           # Apply service
           kubectl apply -f k8s/service.yml
           
-          # Wait for deployment rollout
-          kubectl rollout status deployment/python-microservice --timeout=300s
+          # Wait for deployment rollout with better timeout handling
+          kubectl rollout status deployment/python-microservice --timeout=600s
+          
+          # If rollout fails, get diagnostic information
+          kubectl get pods -l app=python-microservice || echo "No pods found"
+          kubectl describe deployment python-microservice || echo "Deployment description failed"
+          
+          # Get pod logs for troubleshooting
+          POD_NAME=$(kubectl get pods -l app=python-microservice -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || echo "")
+          if [ ! -z "$POD_NAME" ]; then
+            echo "Pod logs for: $POD_NAME"
+            kubectl logs $POD_NAME --tail=50 || echo "Failed to get logs"
+          fi
           
           # Deploy monitoring (optional)
           kubectl apply -f k8s/simple-prometheus.yml || echo "Monitoring deployment failed, continuing..."
