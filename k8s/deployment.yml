@@ -16,4 +16,11 @@ spec:
     - name: flask-microservice
       image: mo4222/todoapp:34e759f21c5756930bc13c797f9c6877e2d3a0cb
       ports:
-      - containerPort: 5001
+      - containerPort: 5000
+      env:
+      - name: MONGO_URI
+        value: "mongodb://mongodb:27017/"
+      - name: MONGO_USERNAME
+        value: "root"
+      - name: MONGO_PASSWORD
+        value: "secret"
