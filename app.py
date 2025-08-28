@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, jsonify, render_template, request, redirect, url_for
 from pymongo import MongoClient
 import os
 
@@ -26,6 +26,13 @@ def add_task():
     if task:
         tasks_collection.insert_one({"task": task})
     return redirect(url_for("index"))
+@app.get("/")
+def index():
+    return jsonify(status="ok", message="Microservice running", version=os.getenv("APP_VERSION", "1.0.0"))
+
+@app.get("/healthz")
+def health():
+    return "ok", 200
 
 @app.route("/delete/<task_id>")
 def delete_task(task_id):
@@ -34,4 +41,6 @@ def delete_task(task_id):
     return redirect(url_for("index"))
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000, debug=True)
+    port = int(os.getenv("PORT", "5000"))
+    app.run(host="0.0.0.0", port=port)
+    #app.run(host="0.0.0.0", port=5000, debug=True)
