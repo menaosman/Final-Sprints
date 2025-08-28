@@ -1,19 +1,74 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
- name: flask-microservice
+  name: flask-microservice
+  labels:
+    app: flask-microservice
 spec:
   replicas: 2
   selector:
-   matchLabels:
-    app: flask-microservice
+    matchLabels:
+      app: flask-microservice
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
   template:
-   metadata:
-    labels:
-     app: flask-microservice
-   spec:
-    containers:
-    - name: flask-microservice
-      image: mo4222/todoapp:34e759f21c5756930bc13c797f9c6877e2d3a0cb
-      ports:
-      - containerPort: 5000
+    metadata:
+      labels:
+        app: flask-microservice
+    spec:
+      containers:
+        - name: flask-microservice
+          image: mo4222/todoapp:34e759f21c5756930bc13c797f9c6877e2d3a0cb
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5000
+          env:
+            - name: APP_VERSION
+              value: "1.0.0"
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 5000
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+#apiVersion: apps/v1
+#kind: Deployment
+#metadata:
+# name: flask-microservice
+ 
+#spec:
+  #replicas: 2
+  #selector:
+  # matchLabels:
+    #app: flask-microservice
+    #
+ 
+  #template:
+   #metadata:
+    #labels:
+     #app: flask-microservice
+   #spec:
+    #containers:
+   # - name: flask-microservice
+     # image: mo4222/todoapp:34e759f21c5756930bc13c797f9c6877e2d3a0cb
+     # ports:
+     # - containerPort: 5000
+      
