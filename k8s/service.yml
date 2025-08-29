@@ -1,13 +1,15 @@
 apiVersion: v1
 kind: Service
 metadata:
- name: flask-microservice-service
+  name: flask-microservice-service
+  labels:
+    app: flask-microservice
 spec:
   type: LoadBalancer
   selector:
-   app: flask-microservice
+    app: flask-microservice
   ports:
-  - protocol: TCP
-    port: 80
-    targetPort: 5000
- 
+    - name: http          # <-- added
+      protocol: TCP
+      port: 80
+      targetPort: 5000
