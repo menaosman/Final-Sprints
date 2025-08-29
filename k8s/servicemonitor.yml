@@ -1,18 +1,18 @@
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
- name: flask-microservice
- namespace: monitoring
- labels:
-  release: kube-prometheus-stack
+  name: flask-microservice
+  namespace: monitoring
+  labels:
+    release: kube-prometheus-stack
 spec:
- selector:
-  matchLabels:
-   app: flask-microservice
- namespaceSelector:
-  matchNames: ["default"]
- endpoints:
-  - port: http
-    path: /health
-    interval: 5s
-    scheme: http
+  selector:
+    matchLabels:
+      app: flask-microservice
+  namespaceSelector:
+    matchNames: ["default"]
+  endpoints:
+    - port: http          # <-- must match Service port name above
+      path: /healthz      # <-- align with app & probes
+      interval: 15s
+      scheme: http
