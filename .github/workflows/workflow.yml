@@ -137,7 +137,8 @@ jobs:
           kubectl apply -f mongodb.yml
           kubectl apply -f deployment.yml
           kubectl apply -f service.yml
-          kubectl rollout status deployment/microservice --timeout=5m
+          kubectl rollout status deployment/flask-microservice --timeout=5m
+
           kubectl get pods -o wide
           kubectl get svc
 
