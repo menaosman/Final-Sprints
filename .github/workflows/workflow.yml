@@ -12,7 +12,9 @@ env:
   MONGO_USERNAME: ${{ vars.MONGO_USERNAME }}
   MONGO_PASSWORD: ${{ secrets.MONGO_PASSWORD }}
   DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   unit_testing:
     name: unit_testing
@@ -92,7 +94,8 @@ jobs:
           echo "Waiting for app..."
           sleep 12
           curl -fsS 127.0.0.1:5001/healthz
-
+          # cleanup
+          docker rm -f todoapp || true
   terraform:
     name: terraform-deployment
     needs: docker
