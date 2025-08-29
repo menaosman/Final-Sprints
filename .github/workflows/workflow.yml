@@ -131,16 +131,26 @@ jobs:
       - name: Update kubeconfig
         run: aws eks --region $AWS_REGION update-kubeconfig --name $EKS_CLUSTER_NAME
 
-      - name: Deploy K8s Manifests
+      - name: Apply K8s manifests
         working-directory: ./k8s
         run: |
           kubectl apply -f mongodb.yml
           kubectl apply -f deployment.yml
           kubectl apply -f service.yml
-          kubectl rollout status deployment/flask-microservice --timeout=5m
 
+      - name: Update image to current build
+        run: |
+          kubectl set image deployment/flask-microservice \
+            flask-microservice=${{ env.DOCKERHUB_USERNAME }}/todoapp:${{ github.sha }} --record
+
+      - name: Wait for rollout
+        run: kubectl rollout status deployment/flask-microservice --timeout=5m
+
+      - name: Inspect
+        run: |
           kubectl get pods -o wide
           kubectl get svc
+
 
   deploy-monitoring:
     name: monitoring
@@ -160,6 +170,17 @@ jobs:
 
       - name: Update kubeconfig
         run: aws eks --region $AWS_REGION update-kubeconfig --name $EKS_CLUSTER_NAME
+      - name: Apply K8s Manifests
+        working-directory: ./k8s
+        run: |
+          kubectl apply -f mongodb.yml
+          kubectl apply -f deployment.yml
+          kubectl apply -f service.yml
+
+      - name: Update image to current build
+        run: |
+          kubectl set image deployment/flask-microservice \
+            flask-microservice=${{ env.DOCKERHUB_USERNAME }}/todoapp:${{ github.sha }} --record
 
       - name: Install Helm + envsubst
         run: |
