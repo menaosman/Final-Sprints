@@ -1,22 +1,23 @@
 grafana:
- adminPassword: "${grafana_admin_password}"
- service:
-  type: LoadBalancer
- persistence:
-  enabled: false
+  adminPassword: "${GRAFANA_ADMIN_PASSWORD}"   # <-- uppercase to match workflow
+  service:
+    type: LoadBalancer
+  persistence:
+    enabled: false
+
 prometheus:
- prometheusSpec:
-  ServiceMonitorSelectorNiUsesHelmValues: false
- service:
-  type: LoadBalancer
+  prometheusSpec:
+    serviceMonitorSelectorNilUsesHelmValues: false   # <-- correct key
+  service:
+    type: LoadBalancer
 
 alertmanager:
- enabled: false
+  enabled: false
 
 prometheusOperator:
- resources:
-  requests:
-   cpu: 100m
-   memory: 200Mi
- admissionWebhooks:
-  enabled: true
+  resources:
+    requests:
+      cpu: 100m
+      memory: 200Mi
+  admissionWebhooks:
+    enabled: true
